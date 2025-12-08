@@ -38,6 +38,8 @@ class GameServer:
     
     def process_turn(self):
         for pid in self.players:
+            if self.players[0]['dead'] or self.players[1]['dead']:
+                continue  # Pula jogadores mortos
             player = self.players[pid]
             direction = player['dir']
             inp = self.last_inputs[pid]
@@ -66,12 +68,22 @@ class GameServer:
 
             # Garante que a posição não ultrapasse a tela
             player['x'] = max(player['x'], 0)
-            player['x'] = min(player['x'], WIDTH)
+            player['x'] = min(player['x'], WIDTH - 1)
             player['y'] = max(player['y'], 0)
-            player['y'] = min(player['y'], HEIGHT)
+            player['y'] = min(player['y'], HEIGHT - 1)
 
-            # Adiciona ao rastro
-            player['rastro'].append((player['x'], player['y']))
+            # Adiciona ao rastro (acumula ao invés de substituir)
+            player['rastro'] = [[player['x'], player['y']]]
+            """ player['rastro'].append([player['x'], player['y']])
+            if len(player['rastro']) > 50:  # Limita o tamanho do rastro
+                player['rastro'].pop(0)
+
+            # Detecta colisões com players
+            for other_pid, other_player in self.players.items():
+                if other_pid == pid:
+                    continue
+                if [player['x'], player['y']] in other_player['rastro']:
+                    player['dead'] = True """
 
     
     def send_state(self):
