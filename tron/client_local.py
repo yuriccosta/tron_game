@@ -6,24 +6,46 @@ import threading
 HOST = '127.0.0.1'
 PORT = 5555
 
-class GameClient:
+class DualGameClient:
+    """Cliente que conecta como AMBOS os jogadores para teste local"""
+    
     def __init__(self):
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect((HOST, PORT))
-        self.my_id = int(self.client.recv(1024).decode().strip())
-        print(f"Sou o Player {self.my_id}")
+        # Conecta como Player 0
+        self.client0 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client0.connect((HOST, PORT))
+        self.id0 = int(self.client0.recv(1024).decode().strip())
+        print(f"Conectado como Player {self.id0}")
+        
+        # Conecta como Player 1
+        self.client1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client1.connect((HOST, PORT))
+        self.id1 = int(self.client1.recv(1024).decode().strip())
+        print(f"Conectado como Player {self.id1}")
 
-        # MUDANÇA 1: Usamos uma lista para guardar TUDO que chega
+        # Fila de estados (só precisa escutar uma conexão, ambas recebem o mesmo estado)
         self.state_queue = [] 
         self.buffer = ""
 
+        # Thread para escutar o servidor (usa client0)
         self.thread_escuta = threading.Thread(target=self.listen_server, daemon=True)
         self.thread_escuta.start()
+        
+        # Thread para drenar client1 (IMPORTANTE: evita travamento por buffer cheio)
+        self.thread_drain = threading.Thread(target=self._drain_client1, daemon=True)
+        self.thread_drain.start()
+
+    def _drain_client1(self):
+        """Consome e descarta dados do client1 para evitar travamento"""
+        while True:
+            try:
+                self.client1.recv(4096)  # Lê e descarta
+            except:
+                break
 
     def listen_server(self):
         while True:
             try:
-                data = self.client.recv(4096).decode()
+                data = self.client0.recv(4096).decode()
                 if not data: break
                 
                 self.buffer += data
@@ -32,7 +54,6 @@ class GameClient:
                     line, self.buffer = self.buffer.split("\n", 1)
                     if line.strip():
                         try:
-                            # MUDANÇA 2: Em vez de sobrescrever, adicionamos na fila
                             state = json.loads(line)
                             self.state_queue.append(state)
                         except json.JSONDecodeError:
@@ -41,18 +62,30 @@ class GameClient:
                 print("Erro:", e)
                 break
 
-    def send_input(self, key):
+    def send_input_p0(self, key):
+        """Envia input para Player 0"""
         try:
-            self.client.sendall(key.encode())
+            self.client0.sendall(key.encode())
         except:
             pass
 
+    def send_input_p1(self, key):
+        """Envia input para Player 1"""
+        try:
+            self.client1.sendall(key.encode())
+        except:
+            pass
+
+
 class App:
     def __init__(self):
-        py.init(256, 256, title="Tron Client")
-        self.net = GameClient()
-        self.last_sent_key = None
-        self.waiting_reset = False  # Se este jogador já pediu reset
+        py.init(256, 256, title="Tron Local - P0: WASD | P1: Setas")
+        self.net = DualGameClient()
+        
+        # Último input enviado para cada jogador
+        self.last_key_p0 = None
+        self.last_key_p1 = None
+        self.waiting_reset = False
         
         # Guardamos o histórico localmente e as posições atuais
         self.players_local_data = {
@@ -67,38 +100,40 @@ class App:
         py.run(self.update, self.draw)
 
     def update(self):
-        # 0. RESET - Tecla ESPAÇO para pedir reiniciar
+        # 0. RESET - Tecla ESPAÇO envia reset para AMBOS
         if py.btnp(py.KEY_SPACE):
-            self.net.send_input('RESET')
+            self.net.send_input_p0('RESET')
+            self.net.send_input_p1('RESET')
             self.waiting_reset = True
         
-        # 1. INPUT - Teclas dependem do ID do jogador
-        key = None
-        if self.net.my_id == 0:
-            # Player 0: WASD
-            if py.btn(py.KEY_W): key = 'UP'
-            elif py.btn(py.KEY_S): key = 'DOWN'
-            elif py.btn(py.KEY_A): key = 'LEFT'
-            elif py.btn(py.KEY_D): key = 'RIGHT'
-        else:
-            # Player 1: Setas
-            if py.btn(py.KEY_UP): key = 'UP'
-            elif py.btn(py.KEY_DOWN): key = 'DOWN'
-            elif py.btn(py.KEY_LEFT): key = 'LEFT'
-            elif py.btn(py.KEY_RIGHT): key = 'RIGHT'
+        # 1. INPUT Player 0: WASD
+        key_p0 = None
+        if py.btn(py.KEY_W): key_p0 = 'UP'
+        elif py.btn(py.KEY_S): key_p0 = 'DOWN'
+        elif py.btn(py.KEY_A): key_p0 = 'LEFT'
+        elif py.btn(py.KEY_D): key_p0 = 'RIGHT'
 
-        if key and key != self.last_sent_key:
-            self.net.send_input(key)
-            self.last_sent_key = key
+        if key_p0 and key_p0 != self.last_key_p0:
+            self.net.send_input_p0(key_p0)
+            self.last_key_p0 = key_p0
 
-        # 2. PROCESSAR PACOTES DA REDE (MUDANÇA CRUCIAL)
-        # Consumimos TUDO o que está na fila da rede
+        # 2. INPUT Player 1: Setas
+        key_p1 = None
+        if py.btn(py.KEY_UP): key_p1 = 'UP'
+        elif py.btn(py.KEY_DOWN): key_p1 = 'DOWN'
+        elif py.btn(py.KEY_LEFT): key_p1 = 'LEFT'
+        elif py.btn(py.KEY_RIGHT): key_p1 = 'RIGHT'
+
+        if key_p1 and key_p1 != self.last_key_p1:
+            self.net.send_input_p1(key_p1)
+            self.last_key_p1 = key_p1
+
+        # 3. PROCESSAR PACOTES DA REDE
         while len(self.net.state_queue) > 0:
-            # Pega o pacote mais antigo (FIFO)
             game_state = self.net.state_queue.pop(0)
             
             # Novo formato: {'players': {...}, 'score': {...}, 'match_winner': ...}
-            players = game_state.get('players', game_state)  # Compatibilidade
+            players = game_state.get('players', game_state)
             
             # Converte score para chaves inteiras (JSON usa strings)
             score_raw = game_state.get('score', {})
@@ -107,27 +142,25 @@ class App:
             
             self.match_winner = game_state.get('match_winner', None)
             
-            # Atualiza os dados locais com esse pacote
             for pid_str, p_data in players.items():
                 pid = int(pid_str)
                 
-                # Detecta se o jogo foi reiniciado (dead passou de True para False)
+                # Detecta se o jogo foi reiniciado
                 was_dead = self.players_local_data[pid]["dead"]
                 is_dead = p_data["dead"]
                 if was_dead and not is_dead:
-                    # Jogo reiniciou! Limpa dados locais de AMBOS os jogadores
                     self.players_local_data[0]["rastro"] = []
                     self.players_local_data[1]["rastro"] = []
                     self.waiting_reset = False
-                    self.last_sent_key = None
+                    self.last_key_p0 = None
+                    self.last_key_p1 = None
                 
                 # Atualiza posição atual e morte
                 self.players_local_data[pid]["x"] = p_data["x"]
                 self.players_local_data[pid]["y"] = p_data["y"]
                 self.players_local_data[pid]["dead"] = p_data["dead"]
                 
-                # Adiciona os novos pedaços de rastro ao nosso histórico
-                # O servidor manda [[x,y]], nós adicionamos isso à nossa lista gigante
+                # Adiciona rastro
                 if p_data["rastro"]:
                     self.players_local_data[pid]["rastro"].extend(p_data["rastro"])
 
@@ -135,12 +168,16 @@ class App:
         py.cls(0)
 
         if not self.players_local_data[0]["rastro"] and not self.players_local_data[1]["rastro"]:
-            py.text(100, 100, "Esperando Oponente...", 7)
+            py.text(80, 100, "Conectando...", 7)
             return
         
-        # Desenha placar no topo
-        score_text = f"P0 {self.score[0]} x {self.score[1]} P1"
-        py.text(100, 5, score_text, 7)
+        # Legenda de controles e placar
+        py.text(5, 5, "P0 (verde): WASD", 11)
+        py.text(5, 15, "P1 (vermelho): Setas", 8)
+        
+        # Placar centralizado
+        score_text = f"{self.score[0]} x {self.score[1]}"
+        py.text(115, 5, score_text, 7)
         
         # Desenha baseado nos dados locais
         for pid, p_data in self.players_local_data.items():
@@ -156,16 +193,11 @@ class App:
         # Mensagens de fim de rodada/partida
         if self.players_local_data[0]["dead"] or self.players_local_data[1]["dead"]:
             if self.match_winner is not None:
-                # Partida acabou!
                 winner_text = f"PLAYER {self.match_winner} VENCEU!"
                 py.text(75, 100, winner_text, 10)
                 py.text(65, 115, "ESPACO para nova partida", 7)
             else:
-                # Rodada acabou
                 py.text(80, 110, "Fim da rodada!", 8)
-                if self.waiting_reset:
-                    py.text(45, 125, "Esperando outro jogador...", 10)
-                else:
-                    py.text(50, 125, "ESPACO para proxima rodada", 7)
+                py.text(60, 125, "ESPACO para continuar", 7)
 
 App()
