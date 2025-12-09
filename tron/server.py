@@ -172,11 +172,22 @@ class GameServer:
     
     def send_state(self):
         # Envia o estado atualizado para os jogadores
+        players_to_send = {}
+        for pid, p_data in self.players.items():
+            players_to_send[pid] = {
+                'x': p_data['x'],
+                'y': p_data['y'],
+                'dir': p_data['dir'],
+                'dead': p_data['dead'],
+                'rastro': p_data['rastro'] # Envia somente o ultimo rastro
+            }
+        
         game_state = {
-            'players': self.players,
+            'players': players_to_send,
             'score': self.score,
             'match_winner': self.match_winner
         }
+            
         state = json.dumps(game_state) + "\n"
         for pid in self.conns:
             try:
