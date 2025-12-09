@@ -13,13 +13,50 @@ TICK_RATE = 1 / 30  # 30 updates por segundo
 class GameServer:
     def __init__(self):
         # Estado do jogo: Posições e Direções
-        self.players = {0: {'x': 20, 'y': 100, 'dir': '2', 'dead': False, 'rastro': []}, 
-                        1: {'x': 230, 'y': 100, 'dir': '1', 'dead': False, 'rastro': []}}
+        # rastro: enviado ao cliente (apenas posição atual)
+        # rastro_completo: usado para colisão (histórico completo)
+        self.players = {
+            0: {'x': 20, 'y': 100, 'dir': '2', 'dead': False, 'rastro': [], 'rastro_completo': []}, 
+            1: {'x': 230, 'y': 100, 'dir': '1', 'dead': False, 'rastro': [], 'rastro_completo': []}
+        }
+        
+        # Placar: melhor de 3 (primeiro a 2 vitórias)
+        self.score = {0: 0, 1: 0}
+        self.match_winner = None  # None = partida em andamento, 0 ou 1 = vencedor final
         
         # Buffer de inputs: Guarda a ultima intenção do jogador
         self.last_inputs = {0: None, 1: None} 
         self.conns = {}
         self.game_started = False
+        # Rastreia quais jogadores pediram reset
+        self.reset_requests = {0: False, 1: False}
+
+    def reset_game(self, full_reset=False):
+        """Reinicia o estado do jogo. full_reset=True reseta o placar também."""
+        self.players = {
+            0: {'x': 20, 'y': 100, 'dir': '2', 'dead': False, 'rastro': [], 'rastro_completo': []}, 
+            1: {'x': 230, 'y': 100, 'dir': '1', 'dead': False, 'rastro': [], 'rastro_completo': []}
+        }
+        self.last_inputs = {0: None, 1: None}
+        self.reset_requests = {0: False, 1: False}
+        
+        if full_reset:
+            self.score = {0: 0, 1: 0}
+            self.match_winner = None
+            print("Partida reiniciada! Placar zerado.")
+        else:
+            print(f"Rodada reiniciada! Placar: P0 {self.score[0]} x {self.score[1]} P1")
+
+    def try_reset(self, pid):
+        """Marca que o jogador quer resetar e verifica se ambos querem"""
+        self.reset_requests[pid] = True
+        print(f"Player {pid} quer reiniciar...")
+        
+        # Se ambos pediram reset, reinicia o jogo
+        if self.reset_requests[0] and self.reset_requests[1]:
+            # Se a partida já teve um vencedor, reseta tudo
+            full_reset = self.match_winner is not None
+            self.reset_game(full_reset)
 
     def handle_client_input(self, pid, conn):
         # Essa função roda em paralelo para cada jogador
@@ -31,19 +68,25 @@ class GameServer:
                 # Só atualizamos o buffer
                 commands = data.split('\n')
                 if commands:
-                    self.last_inputs[pid] = commands[-1] # Pega o último comando válido
+                    cmd = commands[-1]  # Pega o último comando válido
+                    if cmd == 'RESET':
+                        self.try_reset(pid)
+                    else:
+                        self.last_inputs[pid] = cmd
             except:
                 break
         print(f"Player {pid} desconectado.")
     
     def process_turn(self):
+        # Se alguém já morreu, não processa mais
+        if self.players[0]['dead'] or self.players[1]['dead']:
+            return
+        
+        # Primeiro: atualiza direção e posição de todos os jogadores
         for pid in self.players:
-            if self.players[0]['dead'] or self.players[1]['dead']:
-                continue  # Pula jogadores mortos
             player = self.players[pid]
             direction = player['dir']
             inp = self.last_inputs[pid]
-
 
             # Atualiza direção baseado no input recebido
             if inp == 'UP' and direction != '3':
@@ -66,29 +109,75 @@ class GameServer:
             else:  # direction == '2'
                 player['x'] += 2
 
-            # Garante que a posição não ultrapasse a tela
-            player['x'] = max(player['x'], 0)
-            player['x'] = min(player['x'], WIDTH - 1)
-            player['y'] = max(player['y'], 0)
-            player['y'] = min(player['y'], HEIGHT - 1)
-
-            # Adiciona ao rastro (acumula ao invés de substituir)
-            player['rastro'] = [[player['x'], player['y']]]
-            """ player['rastro'].append([player['x'], player['y']])
-            if len(player['rastro']) > 50:  # Limita o tamanho do rastro
-                player['rastro'].pop(0)
-
-            # Detecta colisões com players
+        # Segundo: verifica colisões
+        for pid in self.players:
+            player = self.players[pid]
+            pos = [player['x'], player['y']]
+            
+            # Colisão com bordas
+            if player['x'] <= 0 or player['x'] >= WIDTH - 1:
+                player['dead'] = True
+                print(f"Player {pid} colidiu com a borda horizontal!")
+                continue
+            if player['y'] <= 0 or player['y'] >= HEIGHT - 1:
+                player['dead'] = True
+                print(f"Player {pid} colidiu com a borda vertical!")
+                continue
+            
+            # Colisão com rastros (próprio e do oponente)
             for other_pid, other_player in self.players.items():
-                if other_pid == pid:
-                    continue
-                if [player['x'], player['y']] in other_player['rastro']:
-                    player['dead'] = True """
+                if pos in other_player['rastro_completo']:
+                    player['dead'] = True
+                    print(f"Player {pid} colidiu com o rastro do Player {other_pid}!")
+                    break
+        
+        # Terceiro: colisão frontal (ambos na mesma posição)
+        if self.players[0]['x'] == self.players[1]['x'] and self.players[0]['y'] == self.players[1]['y']:
+            self.players[0]['dead'] = True
+            self.players[1]['dead'] = True
+            print("Colisão frontal! Ambos morreram!")
+        
+        # Quarto: atualiza placar se alguém morreu
+        p0_dead = self.players[0]['dead']
+        p1_dead = self.players[1]['dead']
+        
+        if (p0_dead or p1_dead) and self.match_winner is None:
+            if p0_dead and not p1_dead:
+                # Player 1 ganhou a rodada
+                self.score[1] += 1
+                print(f"Player 1 ganhou a rodada! Placar: P0 {self.score[0]} x {self.score[1]} P1")
+            elif p1_dead and not p0_dead:
+                # Player 0 ganhou a rodada
+                self.score[0] += 1
+                print(f"Player 0 ganhou a rodada! Placar: P0 {self.score[0]} x {self.score[1]} P1")
+            # Empate (ambos morreram) - ninguém pontua
+            
+            # Verifica se alguém venceu a partida (melhor de 3 = primeiro a 2)
+            if self.score[0] >= 2:
+                self.match_winner = 0
+                print("PLAYER 0 VENCEU A PARTIDA!")
+            elif self.score[1] >= 2:
+                self.match_winner = 1
+                print("PLAYER 1 VENCEU A PARTIDA!")
+        
+        # Quinto: adiciona posição ao rastro (se ainda vivo)
+        for pid in self.players:
+            player = self.players[pid]
+            if not player['dead']:
+                pos = [player['x'], player['y']]
+                player['rastro_completo'].append(pos)
+                # rastro enviado ao cliente (apenas a posição atual para economizar banda)
+                player['rastro'] = [pos]
 
     
     def send_state(self):
         # Envia o estado atualizado para os jogadores
-        state = json.dumps(self.players) + "\n"
+        game_state = {
+            'players': self.players,
+            'score': self.score,
+            'match_winner': self.match_winner
+        }
+        state = json.dumps(game_state) + "\n"
         for pid in self.conns:
             try:
                 self.conns[pid].sendall(state.encode())
