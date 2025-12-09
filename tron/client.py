@@ -72,20 +72,13 @@ class App:
             self.net.send_input('RESET')
             self.waiting_reset = True
         
-        # 1. INPUT - Teclas dependem do ID do jogador
         key = None
-        if self.net.my_id == 0:
-            # Player 0: WASD
-            if py.btn(py.KEY_W): key = 'UP'
-            elif py.btn(py.KEY_S): key = 'DOWN'
-            elif py.btn(py.KEY_A): key = 'LEFT'
-            elif py.btn(py.KEY_D): key = 'RIGHT'
-        else:
-            # Player 1: Setas
-            if py.btn(py.KEY_UP): key = 'UP'
-            elif py.btn(py.KEY_DOWN): key = 'DOWN'
-            elif py.btn(py.KEY_LEFT): key = 'LEFT'
-            elif py.btn(py.KEY_RIGHT): key = 'RIGHT'
+    
+        # Player : Setas
+        if py.btn(py.KEY_UP): key = 'UP'
+        elif py.btn(py.KEY_DOWN): key = 'DOWN'
+        elif py.btn(py.KEY_LEFT): key = 'LEFT'
+        elif py.btn(py.KEY_RIGHT): key = 'RIGHT'
 
         if key and key != self.last_sent_key:
             self.net.send_input(key)
