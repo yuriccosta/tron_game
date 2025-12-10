@@ -50,14 +50,26 @@ class GameClient:
 class App:
     def __init__(self):
         py.init(256, 256, title="Tron Client")
-        self.net = GameClient()
+        py.load("tron.pyxres")
+        py.mouse(True)
+
+        # Estado do jogo para controlar o menu
+        self.in_game = False
+
+        self.net = None
         self.last_sent_key = None
         self.waiting_reset = False  # Se este jogador já pediu reset
-        
+
+        # Dimensão e posição do botão
+        self.botao_x = 98
+        self.botao_y = 130
+        self.botao_w = 60
+        self.botao_h = 20
+
         # Guardamos o histórico localmente e as posições atuais
         self.players_local_data = {
-            0: {"x": 0, "y": 0, "dead": False, "rastro": []},
-            1: {"x": 0, "y": 0, "dead": False, "rastro": []}
+            0: {"x": 0, "y": 0, "dead": False, "rastro": [], "dir": "0"},
+            1: {"x": 0, "y": 0, "dead": False, "rastro": [], "dir": "0"}
         }
         
         # Placar
@@ -66,14 +78,38 @@ class App:
         
         py.run(self.update, self.draw)
 
+    # Função para conectar ao servidor
+    def connect_to_server(self):
+        self.net = GameClient()
+        self.in_game = True
+
     def update(self):
+        if not self.in_game:
+            # Posição do mouse
+            mouse_x = py.mouse_x
+            mouse_y = py.mouse_y
+
+            # Verifica se o mouse está dentro do retângulo do botão
+            mouse_over = (
+                mouse_x >= self.botao_x and 
+                mouse_x <= self.botao_x + self.botao_w and 
+                mouse_y >= self.botao_y and 
+                mouse_y <= self.botao_y + self.botao_h
+            )
+
+            # Se clicou com botão esquerdo e estava em cima do botão ou se clicar em enter
+            if (mouse_over and py.btnp(py.MOUSE_BUTTON_LEFT)) or py.btnp(py.KEY_RETURN):
+                self.connect_to_server()
+                
+            return
+
         # 0. RESET - Tecla ESPAÇO para pedir reiniciar
         if py.btnp(py.KEY_SPACE):
             self.net.send_input('RESET')
             self.waiting_reset = True
         
         key = None
-    
+
         # Player : Setas
         if py.btn(py.KEY_UP): key = 'UP'
         elif py.btn(py.KEY_DOWN): key = 'DOWN'
@@ -118,6 +154,7 @@ class App:
                 self.players_local_data[pid]["x"] = p_data["x"]
                 self.players_local_data[pid]["y"] = p_data["y"]
                 self.players_local_data[pid]["dead"] = p_data["dead"]
+                self.players_local_data[pid]["dir"] = p_data["dir"]
                 
                 # Adiciona os novos pedaços de rastro ao nosso histórico
                 # O servidor manda [[x,y]], nós adicionamos isso à nossa lista gigante
@@ -127,8 +164,45 @@ class App:
     def draw(self):
         py.cls(0)
 
+        # --- DESENHO DO MENU ---
+        if not self.in_game:
+            # Desenha cabeça
+            u, v = 10, 22
+            w, h = 112, 64
+
+            py.blt(
+            75, 80, 
+            1,      
+            u, v,  
+            w, h
+            )
+
+            # Lógica visual do botão
+            mx, my = py.mouse_x, py.mouse_y
+            mouse_over = (
+                mx >= self.botao_x and mx <= self.botao_x + self.botao_w and 
+                my >= self.botao_y and my <= self.botao_y + self.botao_h
+            )
+
+            # Mudar de cor ao passar o mouse
+            if mouse_over:
+               cor_botao = 12
+            else:
+               cor_botao = 3
+            
+            # Fundo do botão
+            py.rect(self.botao_x, self.botao_y, self.botao_w, self.botao_h, cor_botao)
+            
+            # Borda do botão
+            py.rectb(self.botao_x, self.botao_y, self.botao_w, self.botao_h, 7)
+
+            # START
+            py.text(self.botao_x + 20, self.botao_y + 8, "START", 7)
+
+            return 
+
         if not self.players_local_data[0]["rastro"] and not self.players_local_data[1]["rastro"]:
-            py.text(100, 100, "Esperando Oponente...", 7)
+            py.text(85, 100, "Esperando Oponente...", 7)
             return
         
         # Desenha placar no topo
@@ -143,8 +217,24 @@ class App:
             for r in p_data["rastro"]:
                 py.rect(r[0], r[1], 2, 2, color)
             
-            # Desenha cabeça
-            py.rect(p_data["x"], p_data["y"], 2, 2, 7)
+            '''
+            # Desenha o carro
+            u, v = 1, 105
+            w, h = 16, 24
+
+            draw_x = p_data["x"] - (w // 2)
+            draw_y = p_data["y"] - (h // 2)
+
+            py.blt(
+            draw_x, 
+            draw_y, 
+            1,      
+            u, v,  
+            w, h,   
+            8,
+            0, 0.7
+            )
+            '''
         
         # Mensagens de fim de rodada/partida
         if self.players_local_data[0]["dead"] or self.players_local_data[1]["dead"]:
