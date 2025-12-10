@@ -1220,10 +1220,10 @@ self.rastro_completo = set()  # Em vez de []
 
 ## 👥 Autores e Contribuidores
 
-- **Desenvolvedor Principal**: João Costa
+- **Desenvolvedor Principal**: Ana Luiza Oliveira, João Vitor Guimarães, Ryan Araújo, Yuri Coutinho
 - **Instituição**: UESC (Universidade Estadual de Santa Cruz)
 - **Disciplina**: Redes de Computadores
-- **Professor**: José Lopes de Oliveira Filho
+- **Professor**: Joorge Lima de Oliveira Filho
 
 ---
 
@@ -1271,5 +1271,5 @@ Para dúvidas ou sugestões sobre o projeto:
 ---
 
 **Versão:** 1.0  
-**Data:** Dezembro de 2024  
+**Data:** Dezembro de 2025  
 **Status:** ✅ Completo e Funcional
