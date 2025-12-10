@@ -7,7 +7,7 @@
 **Trabalho Acadêmico - Redes de Computadores**  
 **UESC - Universidade Estadual de Santa Cruz**  
 **Disciplina:** Redes de Computadores  
-**Professor:** José Lopes de Oliveira Filho
+**Professor:** Jorge Lima de Oliveira Filho
 
 ---
 
