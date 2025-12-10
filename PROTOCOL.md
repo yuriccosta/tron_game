@@ -1,8 +1,8 @@
 # Tron Game Protocol (TGP) - Especificação Técnica
 
 **Versão:** 1.0  
-**Data:** Dezembro de 2024  
-**Autores:** João Costa  
+**Data:** Dezembro de 2025  
+**Autores:** Ana Luiza Oliveira, João Vitor Guimarães, Ryan Araújo e Yuri Coutinho
 **Instituição:** UESC
 
 ---
@@ -1146,8 +1146,5 @@ compressed = zlib.compress(json_str.encode())
    - RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format
 
 ---
-
-**Versão do Documento:** 1.0  
-**Última Atualização:** Dezembro de 2024  
-**Autor:** João Costa (UESC)  
+ 
 **Status:** ✅ Especificação Completa e Implementada
