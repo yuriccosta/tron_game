@@ -231,6 +231,13 @@ class GameServer:
 
     def start(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        # Permite reutilizar a porta 5555 imediatamente se o server cair
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # Desativa o Nagle's Algorithm no socket principal
+        server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         server.bind((HOST, PORT))
         server.listen(2)
         print(f"Servidor ONLINE em {HOST}:{PORT}")
@@ -240,6 +247,8 @@ class GameServer:
         while True:
             try:
                 conn, addr = server.accept()
+                # Desativa o delay para CADA jogador que entra
+                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 
                 # --- LÓGICA DE SLOT INTELIGENTE ---
                 # Procura qual ID (0 ou 1) está livre

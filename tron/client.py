@@ -11,6 +11,10 @@ PALETTE_COLORS = [11, 8, 12, 10]
 class GameClient:
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        # [NOVO] Desativa o delay antes mesmo de conectar
+        self.client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         self.client.connect((HOST, PORT))
         # Recebe o ID do jogador (0 ou 1)
         self.my_id = int(self.client.recv(1024).decode().strip())
