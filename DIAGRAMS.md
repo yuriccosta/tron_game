@@ -2,8 +2,8 @@
 
 **Documento:** Representações Visuais da Arquitetura e Fluxos  
 **Projeto:** Tron Game - Multiplayer Distribuído  
-**Autor:** João Costa  
-**Data:** Dezembro de 2024
+**Autores:** Ana Luiza Oliveira, João Vitor Guimarães, Ryan Araújo, Yuri Coutinho
+**Data:** Dezembro de 2025
 
 ---
 
@@ -233,6 +233,88 @@ Cliente                               Servidor
 
 ---
 
+### Fluxo 1.5: Lobby - Seleção de Cores (v2.0)
+
+```
+Cliente 0                Servidor                Cliente 1
+   │                        │                        │
+   │ [Menu Inicial]         │                        │ [Menu Inicial]
+   │ Clique START           │                        │
+   │                        │                        │
+   │──── connect() ────────►│                        │
+   │◄───── "0\n" ───────────│                        │
+   │                        │                        │
+   │                        │◄────── connect() ──────│
+   │                        │───────── "1\n" ────────►│
+   │                        │                        │
+   │ [LOBBY Screen]         │ game_started = False   │ [LOBBY Screen]
+   │ Vê 4 cores             │ lobby_colors = {0:0,1:1}│ Vê 4 cores
+   │ Verde selecionado      │ lobby_ready = {0:F,1:F}│ Vermelho selecionado
+   │                        │                        │
+   │                        │◄── Envia estados ──────┤
+   │◄─────────── JSON ──────┤        30 Hz           │
+   │    {lobby:{            │                        │
+   │     colors:{0:0,1:1},  │                        │
+   │     ready:{0:F,1:F},   │                        │
+   │     started:False}}    │                        │
+   │                        │                        │
+   │ [Jogador navega]       │                        │
+   │ Pressiona → (direita)  │                        │
+   │ Quer cor Azul (ID 2)   │                        │
+   │                        │                        │
+   │─── "COLOR:2\n" ───────►│                        │
+   │                        │ lobby_colors[0] = 2    │
+   │                        │ lobby_ready[0] = False │
+   │                        │                        │
+   │◄────── JSON ───────────┤────── JSON ────────────►│
+   │  {lobby:{colors:       │   {lobby:{colors:      │
+   │    {0:2,1:1}...}}      │     {0:2,1:1}...}}     │
+   │                        │                        │
+   │ [Azul agora selecionado]                        │ [Vê P0 com Azul]
+   │                        │                        │
+   │ Pressiona ENTER        │                        │
+   │                        │                        │
+   │─── "READY\n" ─────────►│                        │
+   │                        │ lobby_ready[0] = True  │
+   │                        │                        │
+   │◄────── JSON ───────────┤────── JSON ────────────►│
+   │  {lobby:{ready:        │   {lobby:{ready:       │
+   │    {0:T,1:F}...}}      │     {0:T,1:F}...}}     │
+   │                        │                        │
+   │ "VOCÊ ESTÁ PRONTO!"    │                        │ "Aguardando..."
+   │ Aguardando P1...       │                        │
+   │                        │                        │
+   │                        │                        │ Pressiona ENTER
+   │                        │                        │
+   │                        │◄────── "READY\n" ──────│
+   │                        │ lobby_ready[1] = True  │
+   │                        │                        │
+   │                        │ AMBOS READY!           │
+   │                        │ game_started = True    │
+   │                        │ reset_game(full=False) │
+   │                        │ sleep(0.5)             │
+   │                        │                        │
+   │◄────── JSON ───────────┤────── JSON ────────────►│
+   │  {lobby:{started:True}}│   {lobby:{started:True}}
+   │                        │                        │
+   │ [Transição Lobby→Jogo] │                        │ [Transição Lobby→Jogo]
+   │                        │                        │
+   │ [GAME Screen]          │ Loop 30 FPS inicia     │ [GAME Screen]
+   │ Renderiza com cores:   │                        │ Renderiza com cores:
+   │ - P0: Azul (2)         │                        │ - P0: Azul (2)
+   │ - P1: Vermelho (1)     │                        │ - P1: Vermelho (1)
+   │                        │                        │
+```
+
+**Pontos-Chave:**
+1. ✅ Lobby permite escolha de 4 cores: Verde(0), Vermelho(1), Azul(2), Amarelo(3)
+2. ✅ Mudança de cor automaticamente cancela READY
+3. ✅ Ambos devem confirmar READY antes do jogo iniciar
+4. ✅ Estados de lobby sincronizados a 30 Hz
+5. ✅ Cores persistem durante toda a partida (Palette Swap no cliente)
+
+---
+
 ### Fluxo 2: Envio de Input (Cliente → Servidor)
 
 ```
@@ -388,35 +470,62 @@ Cliente (Thread Principal - Pyxel)
 
 ## 🔀 Máquinas de Estado
 
-### Estado do Servidor
+### Estado do Servidor (v2.0 com Lobby)
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                   MÁQUINA DE ESTADOS - SERVIDOR                 │
+│                         (Versão 2.0)                            │
 └────────────────────────────────────────────────────────────────┘
 
-         ┌─────────────────┐
-         │  INITIALIZING   │  
-         │                 │  
-         │ • server.bind() │
-         │ • server.listen │
-         │ • Start threads │
-         └────────┬────────┘
-                  │
-                  │ len(conns) == 2
-                  │ (2 clientes conectados)
-                  ▼
-         ┌─────────────────┐
-         │ WAITING_START   │
-         │                 │
-         │ • print("3s")   │
-         │ • sleep(3)      │
-         │ • started=True  │
-         └────────┬────────┘
-                  │
-                  │ Countdown finalizado
-                  │
-                  ▼
+         ┌─────────────────────┐
+         │   INITIALIZING      │  
+         │                     │  
+         │ • server.bind()     │
+         │ • server.listen()   │
+         │ • Start game_loop() │
+         │ • lobby_colors=     │
+         │   {0:0, 1:1}        │
+         │ • players_ready=    │
+         │   {0:F, 1:F}        │
+         │ • game_started=F    │
+         └──────────┬──────────┘
+                    │
+                    │ len(conns) == 2
+                    │ (2 clientes conectados)
+                    ▼
+         ┌─────────────────────┐
+         │       LOBBY         │
+         │                     │
+         │ Aceita comandos:    │
+         │ • COLOR:X (muda cor)│
+         │ • READY (confirma)  │
+         │                     │
+         │ Envia estados:      │
+         │ • lobby.colors      │
+         │ • lobby.ready       │
+         │ • lobby.started=F   │
+         │                     │
+         │ Condição saída:     │
+         │ • ready[0]==True    │
+         │ • ready[1]==True    │
+         └──────────┬──────────┘
+                    │
+                    │ Ambos READY
+                    │
+                    ▼
+         ┌─────────────────────┐
+         │   WAITING_START     │
+         │                     │
+         │ • print("Prontos!") │
+         │ • game_started=True │
+         │ • reset_game(F)     │
+         │ • sleep(0.5s)       │
+         └──────────┬──────────┘
+                    │
+                    │ Delay finalizado
+                    │
+                    ▼
     ┌────────────────────────┐
     │    ROUND_ACTIVE        │◄──────────────────┐
     │                        │                   │
@@ -741,8 +850,18 @@ server_state = {
         1: <socket.socket>   # Socket TCP do Player 1
     },
     
-    'game_started': True  # bool: Countdown finalizado?
-}
+    # ====== LOBBY SYSTEM (v2.0) ======
+    'lobby_colors': {
+        0: 2,  # int: Cor selecionada pelo Player 0 (0=Verde, 1=Vermelho, 2=Azul, 3=Amarelo)
+        1: 1   # int: Cor selecionada pelo Player 1
+    },
+    
+    'players_ready': {
+        0: True,   # bool: Player 0 confirmou (READY)?
+        1: True    # bool: Player 1 confirmou (READY)?
+    },
+    
+    'game_started': True  # bool: Jogo iniciou? (False = Lobby, True = Jogo)
 ```
 
 ---
@@ -795,7 +914,27 @@ client_state = {
     'match_winner': None,
     
     'last_sent_key': 'RIGHT',  # str ou None: Evita reenvio
-    'waiting_reset': False     # bool: Já enviei RESET?
+    'waiting_reset': False,     # bool: Já enviei RESET?
+    
+    # ====== LOBBY DATA (v2.0) ======
+    'in_game': True,  # bool: False = Menu Inicial, True = Lobby ou Jogo
+    
+    'lobby_colors': {
+        0: 2,  # int: Cores sincronizadas do servidor
+        1: 1
+    },
+    
+    'lobby_ready': {
+        0: True,  # bool: Status READY sincronizado
+        1: True
+    },
+    
+    'game_started': True,  # bool: Recebido do servidor (lobby.started)
+    
+    'my_selection_idx': 2,  # int: Índice local (0-3) antes de enviar COLOR:X
+    
+    # ====== PALETTE SWAP ======
+    'PALETTE_COLORS': [11, 8, 12, 10]  # Mapeamento Pyxel: 0=Verde(11), 1=Vermelho(8), 2=Azul(12), 3=Amarelo(10)
 }
 ```
 
@@ -1116,7 +1255,7 @@ FIFO (First In, First Out):
 
 ---
 
-**Documento criado por:** João Costa  
+**Documento criado por:** Ana Luiza Oliveira, João Vitor Guimarães, Ryan Araújo e Yuri Coutinho
 **Instituição:** UESC  
 **Versão:** 1.0  
 **Data:** Dezembro de 2024
