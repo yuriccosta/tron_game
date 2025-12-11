@@ -3,7 +3,7 @@ import json
 import pyxel as py
 import threading
 
-HOST = '127.0.0.1'
+HOST = '172.20.10.3'
 PORT = 5555
 
 PALETTE_COLORS = [11, 8, 12, 10]
