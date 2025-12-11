@@ -80,15 +80,13 @@ class GameServer:
         finally:
             # --- ÁREA DE LIMPEZA ---
             print(f"Player {pid} desconectou.")
-
             # 1. Remove da lista de conexões ativas
             if pid in self.conns:
                 del self.conns[pid]
             
             # 2. Para o jogo imediatamente
             self.game_started = False
-            self.players_ready = {0: False, 1: False}
-
+            
             # 3. Fecha o socket para garantir
             try:
                 conn.close()
