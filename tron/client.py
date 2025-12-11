@@ -12,7 +12,7 @@ class GameClient:
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
-        # [NOVO] Desativa o delay antes mesmo de conectar
+        # Desativa o delay antes mesmo de conectar
         self.client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         self.client.connect((HOST, PORT))
@@ -329,10 +329,10 @@ class App:
                 draw_x, draw_y, 
                 2,      # Image Bank (Carro)
                 0, 16,  # u, v
-                128, 256,   
+                130, 258,   
                 0,      # Cor transp
                 ROTATE, 
-                0.06    # Scale
+                0.05    # Scale
             )
             
             # Reseta paleta para não afetar o próximo jogador/UI
